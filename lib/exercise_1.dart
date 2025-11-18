@@ -1,96 +1,56 @@
-import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+// Replace with your actual firebase_options file path
+import 'firebase_options.dart'; 
+
+void main() async {
+  // Initialize Flutter Widgets first
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase using the generated options
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print("Firebase initialized successfully!");
+  } catch (e) {
+    print("Error initializing Firebase: $e");
+  }
+
+  runApp(const FirebaseSetupApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class FirebaseSetupApp extends StatelessWidget {
+  const FirebaseSetupApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sign-In Screen',
-      debugShowCheckedModeBanner: false,
-      home: const SignInScreen(),
-    );
-  }
-}
-
-class SignInScreen extends StatefulWidget {
-  const SignInScreen({super.key});
-
-  @override
-  State<SignInScreen> createState() => _SignInScreenState();
-}
-
-class _SignInScreenState extends State<SignInScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-
-  void _login() {
-    if (_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Logging in...')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sign In'),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your email';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your password';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _login,
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: const Text('Login'),
-              ),
-            ],
+      title: 'Firebase Setup Demo',
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Firebase Init Demo')),
+        body: Center(
+          child: FutureBuilder(
+            // Use Firebase.initializeApp() as a future for a clean check
+            future: Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.done) {
+                if (snapshot.hasError) {
+                  return const Text('Initialization Error! Check console.');
+                }
+                return const Text(
+                  'Firebase is Initialized and Running!',
+                  style: TextStyle(fontSize: 18, color: Colors.green),
+                );
+              }
+              // Show a loading spinner while waiting
+              return const CircularProgressIndicator();
+            },
           ),
         ),
       ),
     );
   }
 }
+
