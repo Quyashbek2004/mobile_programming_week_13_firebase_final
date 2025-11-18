@@ -1,139 +1,88 @@
-class HomeScreen extends StatefulWidget {
-  final User user;
-  const HomeScreen({super.key, required this.user});
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
+void main() {
+  runApp(const HttpFunctionApp());
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  late User _user;
-  final _nameController = TextEditingController();
-  final _photoController = TextEditingController();
-  bool _isUpdating = false;
+class HttpFunctionApp extends StatefulWidget {
+  const HttpFunctionApp({super.key});
 
   @override
-  void initState() {
-    super.initState();
-    _user = widget.user;
-    _nameController.text = _user.displayName ?? '';
-    _photoController.text = _user.photoURL ?? '';
-  }
+  State<HttpFunctionApp> createState() => _HttpFunctionAppState();
+}
 
-  Future<void> _updateProfile() async {
-    setState(() => _isUpdating = true);
+class _HttpFunctionAppState extends State<HttpFunctionApp> {
+  static const String _functionUrl = 'YOUR_CLOUD_FUNCTION_URL_HERE';
+  String _responseMessage = 'Waiting for function call...';
+  bool _isLoading = false;
+
+  Future<void> _callHttpFunction() async {
+    if (_functionUrl.contains('YOUR_CLOUD_FUNCTION_URL')) {
+      setState(() => _responseMessage = 'Please update _functionUrl with your actual deployed function URL.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _responseMessage = 'Calling function...';
+    });
 
     try {
-      await _user.updateDisplayName(_nameController.text.trim());
-      await _user.updatePhotoURL(_photoController.text.trim());
-      await _user.reload();
-      _user = FirebaseAuth.instance.currentUser!;
+      final response = await http.get(Uri.parse(_functionUrl));
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully!')),
-      );
-      setState(() {});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _responseMessage = 'Function Response (200 OK):\n${data['message']}\nTime: ${data['timestamp']}';
+        });
+      } else {
+        setState(() {
+          _responseMessage = 'Function call failed with status: ${response.statusCode}';
+        });
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update profile: $e')),
-      );
+      setState(() {
+        _responseMessage = 'Error connecting: $e';
+      });
     } finally {
-      setState(() => _isUpdating = false);
+      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const SignInScreen()),
-              );
-            },
-          )
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  if (_user.photoURL != null && _user.photoURL!.isNotEmpty)
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundImage: NetworkImage(_user.photoURL!),
-                    )
-                  else
-                    const CircleAvatar(
-                      radius: 50,
-                      child: Icon(Icons.person, size: 50),
-                    ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Hello, ${_user.displayName ?? _user.email}',
-                    style: const TextStyle(
-                        fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 20),
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: InputDecoration(
-                      labelText: 'Display Name',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+    return MaterialApp(
+      title: 'HTTP Function Demo',
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Call HTTP Cloud Function')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _callHttpFunction,
+                  icon: _isLoading ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_upload),
+                  label: Text(_isLoading ? 'Calling...' : 'Call Cloud Function'),
+                ),
+                const SizedBox(height: 30),
+                Card(
+                  elevation: 4,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      _responseMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _photoController,
-                    decoration: InputDecoration(
-                      labelText: 'Profile Photo URL',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _isUpdating ? null : _updateProfile,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _isUpdating
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text('Update Profile'),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
