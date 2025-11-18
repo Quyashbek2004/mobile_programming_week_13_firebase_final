@@ -1,266 +1,106 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  runApp(const MyApp());
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const UpdateApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class UpdateApp extends StatelessWidget {
+  const UpdateApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Firebase Auth Demo',
-      debugShowCheckedModeBanner: false,
-      home: const SignInScreen(),
-    );
-  }
-}
-
-class SignInScreen extends StatefulWidget {
-  const SignInScreen({super.key});
-
-  @override
-  State<SignInScreen> createState() => _SignInScreenState();
-}
-
-class _SignInScreenState extends State<SignInScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLoading = false;
-
-  Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-
-      final user = userCredential.user;
-      if (user != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login successful! Welcome ${user.email}')),
-        );
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => HomeScreen(userEmail: user.email!)),
-        );
-      }
-    } on FirebaseAuthException catch (e) {
-      String message;
-      if (e.code == 'user-not-found') {
-        message = 'No user found with that email';
-      } else if (e.code == 'wrong-password') {
-        message = 'Incorrect password';
-      } else if (e.code == 'invalid-email') {
-        message = 'Invalid email format';
-      } else {
-        message = 'Login failed: ${e.message}';
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  InputDecoration _inputDecoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      filled: true,
-      fillColor: Colors.grey[100],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Sign In'), centerTitle: true),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              TextFormField(
-                controller: _emailController,
-                decoration: _inputDecoration('Email'),
-                validator: (value) =>
-                (value == null || value.isEmpty) ? 'Enter your email' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: _inputDecoration('Password'),
-                validator: (value) =>
-                (value == null || value.isEmpty) ? 'Enter your password' : null,
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ResetPasswordScreen()),
-                    );
-                  },
-                  child: const Text('Forgot Password?'),
-                ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _login,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Login'),
-              ),
-            ],
-          ),
-        ),
+      title: 'Update Document Demo',
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Update Firestore Documents')),
+        body: const EditableMessageList(),
       ),
     );
   }
 }
 
-class ResetPasswordScreen extends StatefulWidget {
-  const ResetPasswordScreen({super.key});
+class EditableMessageList extends StatelessWidget {
+  final CollectionReference messages = FirebaseFirestore.instance.collection('messages');
 
-  @override
-  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
-}
+  EditableMessageList({super.key});
 
-class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
-  final _emailController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
-  bool _isSending = false;
+  // Dialog to handle the update
+  void _showEditDialog(BuildContext context, String docId, String currentText) {
+    final TextEditingController controller = TextEditingController(text: currentText);
 
-  Future<void> _sendResetEmail() async {
-    if (!_formKey.currentState!.validate()) return;
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Edit Message'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(labelText: 'New Message Text'),
+            maxLines: 3,
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            ElevatedButton(
+              child: const Text('Save'),
+              onPressed: () {
+                _updateMessage(docId, controller.text);
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
 
-    setState(() => _isSending = true);
+  // Update logic using .update()
+  Future<void> _updateMessage(String docId, String newText) async {
+    if (newText.trim().isEmpty) return;
 
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: _emailController.text.trim(),
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password reset email sent!')),
-      );
-      Navigator.pop(context);
-    } on FirebaseAuthException catch (e) {
-      String message;
-      if (e.code == 'user-not-found') {
-        message = 'No user found with that email';
-      } else if (e.code == 'invalid-email') {
-        message = 'Invalid email format';
-      } else {
-        message = 'Failed: ${e.message}';
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-    } finally {
-      setState(() => _isSending = false);
+      await messages.doc(docId).update({
+        'text': newText,
+        'updatedAt': Timestamp.now(), // Optional: track updates
+      });
+      print('Document $docId updated successfully.');
+    } catch (e) {
+      print('Error updating document: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Reset Password')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              TextFormField(
-                controller: _emailController,
-                decoration: InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                ),
-                validator: (value) =>
-                (value == null || value.isEmpty) ? 'Enter your email' : null,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _isSending ? null : _sendResetEmail,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: _isSending
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Send Reset Email'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+    return StreamBuilder<QuerySnapshot>(
+      stream: messages.orderBy('createdAt', descending: true).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return const Center(child: Text('Error loading data.'));
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
 
-class HomeScreen extends StatelessWidget {
-  final String userEmail;
-  const HomeScreen({super.key, required this.userEmail});
+        return ListView(
+          children: snapshot.data!.docs.map((DocumentSnapshot document) {
+            Map<String, dynamic> data = document.data()! as Map<String, dynamic>;
+            String docId = document.id;
+            String messageText = data['text'] ?? 'No Text';
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const SignInScreen()),
-              );
-            },
-          )
-        ],
-      ),
-      body: Center(
-        child: Text(
-          'Welcome, $userEmail!',
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-      ),
+            return ListTile(
+              title: Text(messageText),
+              subtitle: Text('ID: $docId'),
+              trailing: IconButton(
+                icon: const Icon(Icons.edit, color: Colors.blue),
+                onPressed: () => _showEditDialog(context, docId, messageText),
+              ),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }
