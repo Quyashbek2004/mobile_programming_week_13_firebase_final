@@ -1,82 +1,87 @@
-class HomeScreen extends StatelessWidget {
-  final String userEmail;
-  const HomeScreen({super.key, required this.userEmail});
+
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart'; 
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const DeleteApp());
+}
+
+class DeleteApp extends StatelessWidget {
+  const DeleteApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home'),
-        backgroundColor: Colors.blueAccent,
+    return MaterialApp(
+      title: 'Delete Document Demo',
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Delete Firestore Documents')),
+        body: const DeletableMessageList(),
+      ),
+    );
+  }
+}
+
+class DeletableMessageList extends StatelessWidget {
+  final CollectionReference messages = FirebaseFirestore.instance.collection('messages');
+
+  DeletableMessageList({super.key});
+
+  Future<void> _deleteMessage(BuildContext context, String docId) async {
+    final bool confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: const Text('Are you sure you want to delete this message?'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const SignInScreen()),
-              );
-            },
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
         ],
       ),
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: Colors.blue[50],
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+    ) ?? false;
+
+    if (!confirm) return;
+
+    try {
+      await messages.doc(docId).delete();
+      print('Document $docId deleted successfully.');
+    } catch (e) {
+      print('Error deleting document: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: messages.orderBy('createdAt', descending: true).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return const Center(child: Text('Error loading data.'));
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+        if (snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('No messages. Add a document using Task 3 to test deletion.'));
+        }
+
+        return ListView(
+          children: snapshot.data!.docs.map((DocumentSnapshot document) {
+            Map<String, dynamic> data = document.data()! as Map<String, dynamic>;
+            String docId = document.id;
+            String messageText = data['text'] ?? 'No Text';
+
+            return ListTile(
+              title: Text(messageText),
+              subtitle: Text('ID: $docId'),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete, color: Colors.red),
+                onPressed: () => _deleteMessage(context, docId),
               ),
-              child: Text(
-                'Hello, $userEmail!',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-            ),
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: () async {
-                await FirebaseAuth.instance.signOut();
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SignInScreen()),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blueAccent,
-                foregroundColor: Colors.white,
-                padding:
-                const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'Logout',
-                style: TextStyle(fontSize: 18),
-              ),
-            ),
-          ],
-        ),
-      ),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }
